@@ -29,7 +29,9 @@ const PORT = process.env.PORT || 3000;
 // Helper to intelligently locate cookies file
 function getCookiesPath() {
   const possiblePaths = [
+    path.join(__dirname, 'cookies.txt'),
     path.join(__dirname, 'youtube-cookies.txt'),
+    '/etc/secrets/cookies.txt',
     '/etc/secrets/youtube-cookies.txt'
   ];
   for (const p of possiblePaths) {
@@ -92,24 +94,22 @@ app.get('/api/info', async (req, res) => {
       '--geo-bypass'
     ];
     
-    // Use PO Token strategy
-    if (poToken && visitorData) {
-      console.log('[Info] Using PO_TOKEN bypass strategy...');
-      // Skip webpage/configs to prevent cookie interference as per yt-dlp wiki
-      infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
-      
-      // If we have tokens, disable cookies to prevent profile mismatch
-      if (hasCookies) {
-        console.log('[Info] Tokens detected - disabling cookies to prevent mismatch.');
-        hasCookies = false; 
-      }
-    } else {
-      // Fallback to TV client
-      infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
-    }
-    
+    // Priority 1: Cookies (as requested by user)
     if (hasCookies) {
+      console.log('[Info] Cookies detected - using cookies strategy.');
       infoArgs.push('--cookies', cookiesPath);
+      // Optional: Add mobile/safari UA for better cookie trust
+      infoArgs.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+    } 
+    // Priority 2: PO Tokens (fallback if no cookies)
+    else if (poToken && visitorData) {
+      console.log('[Info] No cookies - using automated PO_TOKEN strategy.');
+      infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
+    } 
+    // Priority 3: TV Client Fallback
+    else {
+      console.log('[Info] No cookies or tokens - using TV client fallback.');
+      infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
     }
 
     const info = await ytdlp.getInfoAsync(url, infoArgs);
@@ -199,15 +199,17 @@ app.get('/api/download', async (req, res) => {
       '--geo-bypass'
     ];
 
-    if (poToken && visitorData) {
-      infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
-      if (hasCookies) hasCookies = false;
-    } else {
-      infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
-    }
-    
+    // Priority 1: Cookies
     if (hasCookies) {
       infoArgs.push('--cookies', cookiesPath);
+    } 
+    // Priority 2: PO Tokens
+    else if (poToken && visitorData) {
+      infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
+    } 
+    // Priority 3: TV Client Fallback
+    else {
+      infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
     }
 
     const info = await ytdlp.getInfoAsync(url, infoArgs);
@@ -232,14 +234,12 @@ app.get('/api/download', async (req, res) => {
       .addArgs('--force-ipv6')
       .addArgs('--geo-bypass');
 
-    if (poToken && visitorData) {
+    if (hasCookies) {
+      downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath);
+    } else if (poToken && visitorData) {
       downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
     } else {
       downloadBuilder = downloadBuilder.addArgs('--extractor-args', 'youtube:player_client=tv,default');
-    }
-      
-    if (hasCookies) {
-      downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath);
     }
 
     if (isVideo) {
