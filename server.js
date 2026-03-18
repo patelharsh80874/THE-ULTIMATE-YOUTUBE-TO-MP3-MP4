@@ -69,13 +69,13 @@ app.get('/api/info', async (req, res) => {
       });
     }
 
-    // Fetch info with enhanced resilient flags
-    // console.log(`Fetching info for: ${url}`);
-    
     // Check if cookies file exists to bypass bot blocks on cloud servers
     const cookiesPath = getCookiesPath();
     const hasCookies = !!cookiesPath;
     
+    // Log whether cookies were successfully loaded (helpful for debugging Render)
+    console.log(`[Info] Cookies detected: ${hasCookies}`);
+
     const infoArgs = [
       '--no-check-certificates',
       '--no-warnings',
@@ -85,9 +85,6 @@ app.get('/api/info', async (req, res) => {
     
     if (hasCookies) {
       infoArgs.push('--cookies', cookiesPath);
-    } else {
-      infoArgs.push('--extractor-args', 'youtube:player_client=ios,mweb');
-      infoArgs.push('--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1');
     }
 
     const info = await ytdlp.getInfoAsync(url, infoArgs);
@@ -170,9 +167,6 @@ app.get('/api/download', async (req, res) => {
     
     if (hasCookies) {
       infoArgs.push('--cookies', cookiesPath);
-    } else {
-      infoArgs.push('--extractor-args', 'youtube:player_client=ios,mweb');
-      infoArgs.push('--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1');
     }
 
     const info = await ytdlp.getInfoAsync(url, infoArgs);
@@ -207,12 +201,6 @@ app.get('/api/download', async (req, res) => {
         .addArgs('-f', `bv*[height<=${resLimit}][ext=mp4]+ba[ext=m4a]/bv*[height<=${resLimit}]+ba/b[height<=${resLimit}]`)
         .addArgs('--merge-output-format', 'mp4');
     } else {
-      if (!hasCookies) {
-        downloadBuilder = downloadBuilder
-          .addArgs('--extractor-args', 'youtube:player_client=ios,mweb')
-          .addArgs('--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1');
-      }
-      
       downloadBuilder = downloadBuilder
         .format({ filter: 'audioonly' })
         .addArgs('-x', '--audio-format', 'mp3', '--audio-quality', audioQuality)
