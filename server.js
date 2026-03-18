@@ -80,7 +80,9 @@ app.get('/api/info', async (req, res) => {
       '--no-check-certificates',
       '--no-warnings',
       '--ignore-errors',
-      '--no-playlist'
+      '--no-playlist',
+      '--force-ipv6', // Bypasses IPv4 datacenter blocks
+      '--extractor-args', 'youtube:player_client=tv,default' // TV client avoids po-tokens
     ];
     
     if (hasCookies) {
@@ -162,7 +164,9 @@ app.get('/api/download', async (req, res) => {
 
     const infoArgs = [
       '--no-check-certificates',
-      '--no-warnings'
+      '--no-warnings',
+      '--force-ipv6',
+      '--extractor-args', 'youtube:player_client=tv,default'
     ];
     
     if (hasCookies) {
@@ -187,7 +191,9 @@ app.get('/api/download', async (req, res) => {
     // Run the download process with resilient flags
     let downloadBuilder = ytdlp.download(url)
       .addArgs('--no-check-certificates')
-      .addArgs('--ffmpeg-location', ffmpegStatic);
+      .addArgs('--ffmpeg-location', ffmpegStatic)
+      .addArgs('--force-ipv6')
+      .addArgs('--extractor-args', 'youtube:player_client=tv,default');
       
     if (hasCookies) {
       downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath);
