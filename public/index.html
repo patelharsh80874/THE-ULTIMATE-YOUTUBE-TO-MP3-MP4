@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="The Ultimate — Premium YouTube to MP3 & MP4 Converter. Fast, free, and modern." />
+  <meta name="keywords" content="YouTube, MP3, audio, downloader, converter, free" />
+  <title>The Ultimate — Premium YouTube Downloader</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Background Decorations -->
+  <canvas id="particleCanvas"></canvas>
+  <div class="bg-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+  </div>
+
+  <!-- Main Container -->
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <h1 class="logo-text">THE <span>ULTIMATE</span></h1>
+      <p class="tagline">The ultimate way to capture your favorite sounds ✨</p>
+    </header>
+
+    <!-- Search Section -->
+    <section class="search-section" id="searchSection">
+      <div class="glass-card search-card">
+        <div class="input-wrapper">
+          <i class="fa-brands fa-youtube input-icon"></i>
+          <input
+            type="text"
+            id="urlInput"
+            class="url-input"
+            placeholder="Paste YouTube Vido or YT Music link here..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button class="btn-clear" id="btnClear" title="Clear">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <button class="btn-primary" id="btnFetch">
+          <span class="btn-text">Extract Information</span>
+          <span class="btn-loader" id="fetchLoader"></span>
+          <i class="fa-solid fa-arrow-right btn-arrow"></i>
+        </button>
+      </div>
+    </section>
+
+    <!-- Video Info Preview -->
+    <section class="preview-section hidden" id="previewSection">
+      <div class="glass-card preview-card">
+        <div class="preview-content">
+          <div class="thumbnail-wrapper">
+            <img id="thumbnail" src="" alt="Video Thumbnail" class="thumbnail" />
+            <div class="duration-badge" id="duration">0:00</div>
+          </div>
+          <div class="video-details">
+            <h2 class="video-title" id="videoTitle">Video Title</h2>
+            <div class="video-meta">
+              <span class="meta-item">
+                <i class="fa-solid fa-user"></i>
+                <span id="author">Author</span>
+              </span>
+              <span class="meta-item">
+                <i class="fa-solid fa-eye"></i>
+                <span id="viewCount">0</span> views
+              </span>
+            </div>
+            
+            <div class="controls-row">
+              <select id="formatSelect" class="quality-select">
+                <option value="mp3">Audio (MP3)</option>
+                <option value="mp4">Video (MP4)</option>
+              </select>
+              <select id="qualitySelect" class="quality-select">
+                <option value="320">320 kbps (Best)</option>
+                <option value="256">256 kbps (High)</option>
+                <option value="192" selected>192 kbps (Standard)</option>
+                <option value="128">128 kbps (Basic)</option>
+              </select>
+            </div>
+
+            <button class="metadata-edit-toggle" id="metadataToggle">
+              <i class="fa-solid fa-sliders"></i> Edit Metadata
+            </button>
+            
+            <div class="metadata-form hidden" id="metadataForm">
+              <div class="meta-input-group">
+                <i class="fa-solid fa-heading"></i>
+                <input type="text" id="editTitle" class="metadata-input" placeholder="Custom Title">
+              </div>
+              <div class="meta-input-group">
+                <i class="fa-solid fa-user-tag"></i>
+                <input type="text" id="editArtist" class="metadata-input" placeholder="Custom Artist">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn-download" id="btnDownload">
+          <div class="btn-download-content">
+            <i class="fa-solid fa-cloud-arrow-down" id="downloadBtnIcon"></i>
+            <span id="downloadBtnText">Download Now</span>
+          </div>
+          <div class="progressBarInner" id="progressBarInner"></div>
+        </button>
+      </div>
+    </section>
+
+    <!-- Recent Downloads -->
+    <section class="history-section hidden" id="historySection">
+      <div class="glass-card history-card">
+        <h3><i class="fa-solid fa-clock-rotate-left"></i> RECENTLY SAVED</h3>
+        <div class="history-list" id="historyList">
+          <!-- History items will be injected here -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Download Status -->
+    <section class="status-section hidden" id="statusSection">
+      <div class="glass-card status-card">
+        <div class="status-icon" id="statusIcon">
+          <div class="spinner"></div>
+        </div>
+        <p class="status-text" id="statusText">Processing your request...</p>
+      </div>
+    </section>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>The Ultimate &copy; 2026 — Premium Downloader</p>
+      <p class="disclaimer">Please use responsibly for personal use only.</p>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
