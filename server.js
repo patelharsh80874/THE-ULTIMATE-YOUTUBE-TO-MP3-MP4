@@ -94,12 +94,14 @@ app.get('/api/info', async (req, res) => {
       '--geo-bypass'
     ];
     
-    // Priority 1: Cookies (as requested by user)
+    // Priority 1: Cookies (High Success Mobile Strategy)
     if (hasCookies) {
-      console.log('[Info] Cookies detected - using cookies strategy.');
+      console.log('[Info] Cookies detected - using Android Mobile strategy.');
       infoArgs.push('--cookies', cookiesPath);
-      // Optional: Add mobile/safari UA for better cookie trust
-      infoArgs.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+      // Use the 'android' client which is currently the most resilient to bot checks
+      infoArgs.push('--extractor-args', 'youtube:player_client=android,web;player_skip=webpage,configs');
+      // Use an Android-specific User-Agent
+      infoArgs.push('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
     } 
     // Priority 2: PO Tokens (fallback if no cookies)
     else if (poToken && visitorData) {
@@ -199,9 +201,11 @@ app.get('/api/download', async (req, res) => {
       '--geo-bypass'
     ];
 
-    // Priority 1: Cookies
+    // Priority 1: Cookies (Android Strategy)
     if (hasCookies) {
       infoArgs.push('--cookies', cookiesPath);
+      infoArgs.push('--extractor-args', 'youtube:player_client=android,web;player_skip=webpage,configs');
+      infoArgs.push('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
     } 
     // Priority 2: PO Tokens
     else if (poToken && visitorData) {
@@ -235,7 +239,9 @@ app.get('/api/download', async (req, res) => {
       .addArgs('--geo-bypass');
 
     if (hasCookies) {
-      downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath);
+      downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath)
+        .addArgs('--extractor-args', 'youtube:player_client=android,web;player_skip=webpage,configs')
+        .addArgs('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
     } else if (poToken && visitorData) {
       downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
     } else {
