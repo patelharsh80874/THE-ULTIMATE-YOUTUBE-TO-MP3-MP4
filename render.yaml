@@ -3,7 +3,7 @@ services:
     name: the-ultimate-downloader
     env: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install && node -e "require('ytdlp-nodejs').helpers.downloadYtDlp()"
     startCommand: npm start
     envVars:
       - key: NODE_ENV

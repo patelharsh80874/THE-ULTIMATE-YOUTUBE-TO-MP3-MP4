@@ -5,6 +5,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
 const path = require('path');
 const { PassThrough } = require('stream');
+const { generate } = require('youtube-po-token-generator');
 
 // Initialize yt-dlp wrapper
 const ytdlp = new YtDlp();
@@ -25,6 +26,41 @@ ffmpeg.setFfmpegPath(ffmpegStatic);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Token Cache for server-side PO Token generation
+let tokenCache = {
+  poToken: null,
+  visitorData: null,
+  expiresAt: 0
+};
+
+// Helper: Ensure we have valid PO tokens (refresh every 30 mins)
+async function ensureValidTokens() {
+  const now = Date.now();
+  // If we have tokens and they haven't expired, return them
+  if (tokenCache.poToken && tokenCache.visitorData && now < tokenCache.expiresAt) {
+    return { poToken: tokenCache.poToken, visitorData: tokenCache.visitorData };
+  }
+
+  try {
+    console.log('[Token] Auto-generating fresh server-side tokens...');
+    const result = await generate();
+    if (result && result.poToken && result.visitorData) {
+      tokenCache = {
+        poToken: result.poToken,
+        visitorData: result.visitorData,
+        expiresAt: now + (30 * 60 * 1000) // 30 minutes cache
+      };
+      console.log('[Token] Successfully refreshed tokens.');
+      return result;
+    }
+    throw new Error('Invalid token response from generator');
+  } catch (err) {
+    console.error('[Token] Failed to auto-generate tokens:', err.message);
+    // Return stale tokens as fallback or null
+    return { poToken: tokenCache.poToken, visitorData: tokenCache.visitorData };
+  }
+}
 
 // Helper to intelligently locate cookies file
 function getCookiesPath() {
@@ -76,13 +112,23 @@ app.get('/api/info', async (req, res) => {
     // Log whether cookies were successfully loaded (helpful for debugging Render)
     console.log(`[Info] Cookies detected: ${hasCookies}`);
 
-    // Decode tokens (they might be URL-encoded from terminal copy-paste)
+    // Decode tokens or use auto-generated ones
     const rawPoToken = (process.env.PO_TOKEN || '').trim();
     const rawVisitorData = (process.env.VISITOR_DATA || '').trim();
     
-    const poToken = rawPoToken.includes('%') ? decodeURIComponent(rawPoToken) : rawPoToken;
-    const visitorData = rawVisitorData.includes('%') ? decodeURIComponent(rawVisitorData) : rawVisitorData;
+    let poToken = rawPoToken.includes('%') ? decodeURIComponent(rawPoToken) : rawPoToken;
+    let visitorData = rawVisitorData.includes('%') ? decodeURIComponent(rawVisitorData) : rawVisitorData;
     
+    // If no manual tokens provided, use auto-generated server-side tokens
+    if (!poToken || !visitorData) {
+      const autoTokens = await ensureValidTokens();
+      if (autoTokens.poToken && autoTokens.visitorData) {
+        poToken = autoTokens.poToken;
+        visitorData = autoTokens.visitorData;
+        console.log('[Info] Using automated server-side tokens.');
+      }
+    }
+
     const infoArgs = [
       '--no-check-certificates',
       '--no-warnings',
@@ -92,19 +138,18 @@ app.get('/api/info', async (req, res) => {
       '--geo-bypass'
     ];
     
-    // Use PO Token if provided (highest success rate on servers)
+    // Use PO Token strategy
     if (poToken && visitorData) {
-      console.log('[Info] Using PO_TOKEN bypass strategy...');
       // Skip webpage/configs to prevent cookie interference as per yt-dlp wiki
       infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
       
-      // If we have a PO_TOKEN, we often want to SKIP cookies to avoid "visitor_data" mismatch
+      // If we have tokens, disable cookies to prevent profile mismatch
       if (hasCookies) {
-        console.log('[Info] PO_TOKEN detected - disabling cookies to prevent mismatch.');
+        console.log('[Info] Tokens detected - disabling cookies to prevent mismatch.');
         hasCookies = false; 
       }
     } else {
-      // Fallback to TV client which currently doesn't require tokens for many videos
+      // Fallback to TV client
       infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
     }
     
@@ -189,8 +234,14 @@ app.get('/api/download', async (req, res) => {
     const rawPoToken = (process.env.PO_TOKEN || '').trim();
     const rawVisitorData = (process.env.VISITOR_DATA || '').trim();
     
-    const poToken = rawPoToken.includes('%') ? decodeURIComponent(rawPoToken) : rawPoToken;
-    const visitorData = rawVisitorData.includes('%') ? decodeURIComponent(rawVisitorData) : rawVisitorData;
+    let poToken = rawPoToken.includes('%') ? decodeURIComponent(rawPoToken) : rawPoToken;
+    let visitorData = rawVisitorData.includes('%') ? decodeURIComponent(rawVisitorData) : rawVisitorData;
+
+    if (!poToken || !visitorData) {
+      const autoTokens = await ensureValidTokens();
+      poToken = autoTokens.poToken;
+      visitorData = autoTokens.visitorData;
+    }
 
     const infoArgs = [
       '--no-check-certificates',
