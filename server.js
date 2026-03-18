@@ -76,14 +76,24 @@ app.get('/api/info', async (req, res) => {
     // Log whether cookies were successfully loaded (helpful for debugging Render)
     console.log(`[Info] Cookies detected: ${hasCookies}`);
 
+    const poToken = process.env.PO_TOKEN;
+    const visitorData = process.env.VISITOR_DATA;
+    
     const infoArgs = [
       '--no-check-certificates',
       '--no-warnings',
       '--ignore-errors',
       '--no-playlist',
-      '--force-ipv6', // Bypasses IPv4 datacenter blocks
-      '--extractor-args', 'youtube:player_client=tv,default' // TV client avoids po-tokens
+      '--force-ipv6'
     ];
+    
+    // Use PO Token if provided (highest success rate on servers)
+    if (poToken && visitorData) {
+      infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData}`);
+    } else {
+      // Fallback to TV client which currently doesn't require tokens for many videos
+      infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
+    }
     
     if (hasCookies) {
       infoArgs.push('--cookies', cookiesPath);
@@ -162,12 +172,20 @@ app.get('/api/download', async (req, res) => {
     const cookiesPath = getCookiesPath();
     const hasCookies = !!cookiesPath;
 
+    const poToken = process.env.PO_TOKEN;
+    const visitorData = process.env.VISITOR_DATA;
+
     const infoArgs = [
       '--no-check-certificates',
       '--no-warnings',
-      '--force-ipv6',
-      '--extractor-args', 'youtube:player_client=tv,default'
+      '--force-ipv6'
     ];
+
+    if (poToken && visitorData) {
+      infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData}`);
+    } else {
+      infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
+    }
     
     if (hasCookies) {
       infoArgs.push('--cookies', cookiesPath);
@@ -192,8 +210,13 @@ app.get('/api/download', async (req, res) => {
     let downloadBuilder = ytdlp.download(url)
       .addArgs('--no-check-certificates')
       .addArgs('--ffmpeg-location', ffmpegStatic)
-      .addArgs('--force-ipv6')
-      .addArgs('--extractor-args', 'youtube:player_client=tv,default');
+      .addArgs('--force-ipv6');
+
+    if (poToken && visitorData) {
+      downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData}`);
+    } else {
+      downloadBuilder = downloadBuilder.addArgs('--extractor-args', 'youtube:player_client=tv,default');
+    }
       
     if (hasCookies) {
       downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath);
