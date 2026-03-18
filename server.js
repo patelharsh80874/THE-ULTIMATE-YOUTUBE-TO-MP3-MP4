@@ -71,25 +71,38 @@ app.get('/api/info', async (req, res) => {
 
     // Check if cookies file exists to bypass bot blocks on cloud servers
     const cookiesPath = getCookiesPath();
-    const hasCookies = !!cookiesPath;
+    let hasCookies = !!cookiesPath;
     
     // Log whether cookies were successfully loaded (helpful for debugging Render)
     console.log(`[Info] Cookies detected: ${hasCookies}`);
 
-    const poToken = process.env.PO_TOKEN;
-    const visitorData = process.env.VISITOR_DATA;
+    // Decode tokens (they might be URL-encoded from terminal copy-paste)
+    const rawPoToken = (process.env.PO_TOKEN || '').trim();
+    const rawVisitorData = (process.env.VISITOR_DATA || '').trim();
+    
+    const poToken = rawPoToken.includes('%') ? decodeURIComponent(rawPoToken) : rawPoToken;
+    const visitorData = rawVisitorData.includes('%') ? decodeURIComponent(rawVisitorData) : rawVisitorData;
     
     const infoArgs = [
       '--no-check-certificates',
       '--no-warnings',
       '--ignore-errors',
       '--no-playlist',
-      '--force-ipv6'
+      '--force-ipv6',
+      '--geo-bypass'
     ];
     
     // Use PO Token if provided (highest success rate on servers)
     if (poToken && visitorData) {
-      infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData}`);
+      console.log('[Info] Using PO_TOKEN bypass strategy...');
+      // Skip webpage/configs to prevent cookie interference as per yt-dlp wiki
+      infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
+      
+      // If we have a PO_TOKEN, we often want to SKIP cookies to avoid "visitor_data" mismatch
+      if (hasCookies) {
+        console.log('[Info] PO_TOKEN detected - disabling cookies to prevent mismatch.');
+        hasCookies = false; 
+      }
     } else {
       // Fallback to TV client which currently doesn't require tokens for many videos
       infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
@@ -170,19 +183,25 @@ app.get('/api/download', async (req, res) => {
     }
 
     const cookiesPath = getCookiesPath();
-    const hasCookies = !!cookiesPath;
+    let hasCookies = !!cookiesPath;
 
-    const poToken = process.env.PO_TOKEN;
-    const visitorData = process.env.VISITOR_DATA;
+    // Decode tokens
+    const rawPoToken = (process.env.PO_TOKEN || '').trim();
+    const rawVisitorData = (process.env.VISITOR_DATA || '').trim();
+    
+    const poToken = rawPoToken.includes('%') ? decodeURIComponent(rawPoToken) : rawPoToken;
+    const visitorData = rawVisitorData.includes('%') ? decodeURIComponent(rawVisitorData) : rawVisitorData;
 
     const infoArgs = [
       '--no-check-certificates',
       '--no-warnings',
-      '--force-ipv6'
+      '--force-ipv6',
+      '--geo-bypass'
     ];
 
     if (poToken && visitorData) {
-      infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData}`);
+      infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
+      if (hasCookies) hasCookies = false;
     } else {
       infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
     }
@@ -210,10 +229,11 @@ app.get('/api/download', async (req, res) => {
     let downloadBuilder = ytdlp.download(url)
       .addArgs('--no-check-certificates')
       .addArgs('--ffmpeg-location', ffmpegStatic)
-      .addArgs('--force-ipv6');
+      .addArgs('--force-ipv6')
+      .addArgs('--geo-bypass');
 
     if (poToken && visitorData) {
-      downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData}`);
+      downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
     } else {
       downloadBuilder = downloadBuilder.addArgs('--extractor-args', 'youtube:player_client=tv,default');
     }
