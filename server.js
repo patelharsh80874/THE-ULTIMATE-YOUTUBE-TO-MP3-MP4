@@ -26,6 +26,18 @@ ffmpeg.setFfmpegPath(ffmpegStatic);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Helper to intelligently locate cookies file
+function getCookiesPath() {
+  const possiblePaths = [
+    path.join(__dirname, 'youtube-cookies.txt'),
+    '/etc/secrets/youtube-cookies.txt'
+  ];
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -59,14 +71,26 @@ app.get('/api/info', async (req, res) => {
 
     // Fetch info with enhanced resilient flags
     // console.log(`Fetching info for: ${url}`);
-    const info = await ytdlp.getInfoAsync(url, [
+    
+    // Check if cookies file exists to bypass bot blocks on cloud servers
+    const cookiesPath = getCookiesPath();
+    const hasCookies = !!cookiesPath;
+    
+    const infoArgs = [
       '--no-check-certificates',
       '--no-warnings',
-      '--extractor-args', 'youtube:player_client=ios,mweb',
-      '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1',
       '--ignore-errors',
       '--no-playlist'
-    ]);
+    ];
+    
+    if (hasCookies) {
+      infoArgs.push('--cookies', cookiesPath);
+    } else {
+      infoArgs.push('--extractor-args', 'youtube:player_client=ios,mweb');
+      infoArgs.push('--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1');
+    }
+
+    const info = await ytdlp.getInfoAsync(url, infoArgs);
     
     if (!info || !info.title) {
         throw new Error('Could not retrieve video details. The content might be private or restricted.');
@@ -136,12 +160,23 @@ app.get('/api/download', async (req, res) => {
       audioQuality = qualityMap[quality] || '192K';
     }
 
-    const info = await ytdlp.getInfoAsync(url, [
+    const cookiesPath = getCookiesPath();
+    const hasCookies = !!cookiesPath;
+
+    const infoArgs = [
       '--no-check-certificates',
-      '--no-warnings',
-      '--extractor-args', 'youtube:player_client=ios,mweb',
-      '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1'
-    ]);
+      '--no-warnings'
+    ];
+    
+    if (hasCookies) {
+      infoArgs.push('--cookies', cookiesPath);
+    } else {
+      infoArgs.push('--extractor-args', 'youtube:player_client=ios,mweb');
+      infoArgs.push('--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1');
+    }
+
+    const info = await ytdlp.getInfoAsync(url, infoArgs);
+
     const finalTitle = customTitle || info.title;
     const finalArtist = customArtist || (info.artist || info.creator || info.uploader);
     
@@ -159,6 +194,10 @@ app.get('/api/download', async (req, res) => {
     let downloadBuilder = ytdlp.download(url)
       .addArgs('--no-check-certificates')
       .addArgs('--ffmpeg-location', ffmpegStatic);
+      
+    if (hasCookies) {
+      downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath);
+    }
 
     if (isVideo) {
       const resLimit = quality || '720';
@@ -168,9 +207,13 @@ app.get('/api/download', async (req, res) => {
         .addArgs('-f', `bv*[height<=${resLimit}][ext=mp4]+ba[ext=m4a]/bv*[height<=${resLimit}]+ba/b[height<=${resLimit}]`)
         .addArgs('--merge-output-format', 'mp4');
     } else {
+      if (!hasCookies) {
+        downloadBuilder = downloadBuilder
+          .addArgs('--extractor-args', 'youtube:player_client=ios,mweb')
+          .addArgs('--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1');
+      }
+      
       downloadBuilder = downloadBuilder
-        .addArgs('--extractor-args', 'youtube:player_client=ios,mweb')
-        .addArgs('--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1')
         .format({ filter: 'audioonly' })
         .addArgs('-x', '--audio-format', 'mp3', '--audio-quality', audioQuality)
         .addArgs('--metadata-from-title', '%(artist)s - %(title)s')
