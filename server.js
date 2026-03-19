@@ -1,694 +1,346 @@
-// const express = require('express');
-// const cors = require('cors');
-// const { YtDlp, helpers } = require('ytdlp-nodejs');
-// const ffmpeg = require('fluent-ffmpeg');
-// const ffmpegStatic = require('ffmpeg-static');
-// const path = require('path');
-// const { PassThrough } = require('stream');
-
-// // Initialize yt-dlp wrapper
-// const ytdlp = new YtDlp();
-
-// // Ensure yt-dlp binary is downloaded if not present
-// (async () => {
-//   try {
-//     console.log('Checking yt-dlp installation...');
-//     await helpers.downloadYtDlp();
-//     console.log('yt-dlp is ready.');
-//   } catch(e) {
-//     console.error('Warning: Failed to auto-download yt-dlp binary', e);
-//   }
-// })();
-
-// // Set ffmpeg path
-// ffmpeg.setFfmpegPath(ffmpegStatic);
-
-// const app = express();
-// const PORT = process.env.PORT || 3000;
-
-// // Helper to intelligently locate cookies file
-// function getCookiesPath() {
-//   const possiblePaths = [
-//     path.join(__dirname, 'cookies.txt'),
-//     path.join(__dirname, 'youtube-cookies.txt'),
-//     '/etc/secrets/cookies.txt',
-//     '/etc/secrets/youtube-cookies.txt'
-//   ];
-//   for (const p of possiblePaths) {
-//     if (fs.existsSync(p)) return p;
-//   }
-//   return null;
-// }
-
-// // Middleware
-// app.use(cors());
-// app.use(express.json());
-// app.use(express.static(path.join(__dirname, 'public')));
-
-// // ─── Helper: validate YouTube URL ───────────────────────────────
-// function isValidYouTubeUrl(url) {
-//   // Broad pattern to support all YouTube/YT Music variations
-//   const pattern = /^(https?:\/\/)?(www\.|music\.)?(youtube\.com|youtu\.be)\/.+/;
-//   return pattern.test(url);
-// }
-
-// // ─── Helper: format duration ────────────────────────────────────
-// function formatDuration(seconds) {
-//   if (!seconds) return '0:00';
-//   const mins = Math.floor(seconds / 60);
-//   const secs = Math.floor(seconds % 60);
-//   return `${mins}:${secs.toString().padStart(2, '0')}`;
-// }
-
-// // ─── API: Get Video Info ────────────────────────────────────────
-// app.get('/api/info', async (req, res) => {
-//   try {
-//     const { url } = req.query;
-
-//     if (!url || !isValidYouTubeUrl(url)) {
-//       return res.status(400).json({
-//         error: 'Please provide a valid YouTube or YT Music link.'
-//       });
-//     }
-
-//     // Check if cookies file exists to bypass bot blocks on cloud servers
-//     const cookiesPath = getCookiesPath();
-//     let hasCookies = !!cookiesPath;
-    
-//     // Log whether cookies were successfully loaded (helpful for debugging Render)
-//     console.log(`[Info] Cookies detected: ${hasCookies}`);
-
-//     // Decode tokens (Handling URL-encoded %3D%3D strings)
-//     const rawPoToken = (process.env.PO_TOKEN || '').trim();
-//     const rawVisitorData = (process.env.VISITOR_DATA || '').trim();
-    
-//     const poToken = rawPoToken.includes('%') ? decodeURIComponent(rawPoToken) : rawPoToken;
-//     const visitorData = rawVisitorData.includes('%') ? decodeURIComponent(rawVisitorData) : rawVisitorData;
-
-//     const infoArgs = [
-//       '--no-check-certificates',
-//       '--no-warnings',
-//       '--ignore-errors',
-//       '--no-playlist',
-//       '--force-ipv6',
-//       '--geo-bypass'
-//     ];
-    
-//     // Priority 1: Cookies (High Success Mobile Strategy)
-//     if (hasCookies) {
-//       console.log('[Info] Cookies detected - using Android Mobile strategy.');
-//       infoArgs.push('--cookies', cookiesPath);
-//       // Use the 'android' client which is currently the most resilient to bot checks
-//       infoArgs.push('--extractor-args', 'youtube:player_client=android,web;player_skip=webpage,configs');
-//       // Use an Android-specific User-Agent
-//       infoArgs.push('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
-//     } 
-//     // Priority 2: PO Tokens (fallback if no cookies)
-//     else if (poToken && visitorData) {
-//       console.log('[Info] No cookies - using automated PO_TOKEN strategy.');
-//       infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
-//     } 
-//     // Priority 3: TV Client Fallback
-//     else {
-//       console.log('[Info] No cookies or tokens - using TV client fallback.');
-//       infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
-//     }
-
-//     const info = await ytdlp.getInfoAsync(url, infoArgs);
-    
-//     if (!info || !info.title) {
-//         throw new Error('Could not retrieve video details. The content might be private or restricted.');
-//     }
-
-//     // Stable artist extraction
-//     const author = info.artist || info.creator || info.uploader || 'Unknown';
-    
-//     // Safely extract resolutions
-//     let resolutions = [1080, 720, 480, 360];
-//     if (info.formats && Array.isArray(info.formats)) {
-//       const found = [...new Set(info.formats
-//         .filter(f => f.vcodec !== 'none' && f.height)
-//         .map(f => f.height))]
-//         .sort((a, b) => b - a);
-//       if (found.length > 0) resolutions = found;
-//     }
-
-//     res.json({
-//       success: true,
-//       data: {
-//         title: info.title || 'Untitled',
-//         author: author,
-//         duration: formatDuration(info.duration || 0),
-//         thumbnail: info.thumbnail || (info.thumbnails && info.thumbnails.length > 0 ? info.thumbnails[info.thumbnails.length - 1].url : ''),
-//         viewCount: (info.view_count || 0).toLocaleString(),
-//         videoId: info.id,
-//         availableResolutions: resolutions
-//       }
-//     });
-//   } catch (error) {
-//     console.error('Info Error Details:', error);
-//     const cleanError = error.message?.split('\n')[0] || 'Failed to fetch video information.';
-//     res.status(500).json({ 
-//         error: `${cleanError} The video may be restricted, private, or YouTube might be blocking the request.` 
-//     });
-//   }
-// });
-
-// // ─── API: Update yt-dlp ─────────────────────────────────────────
-// app.get('/api/update', async (req, res) => {
-//     try {
-//         // console.log('Updating yt-dlp binary...');
-//         await helpers.downloadYtDlp();
-//         res.json({ success: true, message: 'yt-dlp binary updated successfully.' });
-//     } catch (error) {
-//         res.status(500).json({ error: 'Failed to update binary: ' + error.message });
-//     }
-// });
-
-// const fs = require('fs');
-
-// // ─── API: Download Audio as MP3 ─────────────────────────────────
-// app.get('/api/download', async (req, res) => {
-//   try {
-//     const { url, quality = '192', format = 'mp3', customTitle, customArtist } = req.query;
-
-//     if (!url || !isValidYouTubeUrl(url)) {
-//       return res.status(400).json({ error: 'Invalid URL.' });
-//     }
-
-//     const isVideo = format === 'mp4';
-//     let audioQuality = quality;
-    
-//     if (!isVideo) {
-//       const qualityMap = { '320': '320K', '256': '256K', '192': '192K', '128': '128K' };
-//       audioQuality = qualityMap[quality] || '192K';
-//     }
-
-//     const cookiesPath = getCookiesPath();
-//     let hasCookies = !!cookiesPath;
-
-//     // Decode tokens
-//     const rawPoToken = (process.env.PO_TOKEN || '').trim();
-//     const rawVisitorData = (process.env.VISITOR_DATA || '').trim();
-    
-//     const poToken = rawPoToken.includes('%') ? decodeURIComponent(rawPoToken) : rawPoToken;
-//     const visitorData = rawVisitorData.includes('%') ? decodeURIComponent(rawVisitorData) : rawVisitorData;
-
-//     const infoArgs = [
-//       '--no-check-certificates',
-//       '--no-warnings',
-//       '--force-ipv6',
-//       '--geo-bypass'
-//     ];
-
-//     // Priority 1: Cookies (Android Strategy)
-//     if (hasCookies) {
-//       infoArgs.push('--cookies', cookiesPath);
-//       infoArgs.push('--extractor-args', 'youtube:player_client=android,web;player_skip=webpage,configs');
-//       infoArgs.push('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
-//     } 
-//     // Priority 2: PO Tokens
-//     else if (poToken && visitorData) {
-//       infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
-//     } 
-//     // Priority 3: TV Client Fallback
-//     else {
-//       infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
-//     }
-
-//     const info = await ytdlp.getInfoAsync(url, infoArgs);
-
-//     const finalTitle = customTitle || info.title;
-//     const finalArtist = customArtist || (info.artist || info.creator || info.uploader);
-    
-//     const safeTitle = (finalTitle || 'Download').replace(/[^\w\s-]/g, '').trim();
-
-//     const tempDir = path.join(__dirname, 'temp_downloads');
-//     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-
-//     res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}.${isVideo ? 'mp4' : 'mp3'}"`);
-//     res.setHeader('Content-Type', isVideo ? 'video/mp4' : 'audio/mpeg');
-
-//     // console.log(`Download request: ${url}, format: ${format}, quality: ${quality}`);
-    
-//     // Run the download process with resilient flags
-//     let downloadBuilder = ytdlp.download(url)
-//       .addArgs('--no-check-certificates')
-//       .addArgs('--ffmpeg-location', ffmpegStatic)
-//       .addArgs('--force-ipv6')
-//       .addArgs('--geo-bypass');
-
-//     if (hasCookies) {
-//       downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath)
-//         .addArgs('--extractor-args', 'youtube:player_client=android,web;player_skip=webpage,configs')
-//         .addArgs('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
-//     } else if (poToken && visitorData) {
-//       downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
-//     } else {
-//       downloadBuilder = downloadBuilder.addArgs('--extractor-args', 'youtube:player_client=tv,default');
-//     }
-
-//     if (isVideo) {
-//       const resLimit = quality || '720';
-//       // console.log(`[DOWNLOAD] MP4 Mode - URL: ${url}, Target Resolution: ${resLimit}p`);
-      
-//       downloadBuilder = downloadBuilder
-//         .addArgs('-f', `bv*[height<=${resLimit}][ext=mp4]+ba[ext=m4a]/bv*[height<=${resLimit}]+ba/b[height<=${resLimit}]`)
-//         .addArgs('--merge-output-format', 'mp4');
-//     } else {
-//       downloadBuilder = downloadBuilder
-//         .format({ filter: 'audioonly' })
-//         .addArgs('-x', '--audio-format', 'mp3', '--audio-quality', audioQuality)
-//         .addArgs('--metadata-from-title', '%(artist)s - %(title)s')
-//         .addArgs('--postprocessor-args', `ffmpeg:-metadata title="${finalTitle}" -metadata artist="${finalArtist}"`)
-//         .embedThumbnail()
-//         .embedMetadata();
-//     }
-
-//     const result = await downloadBuilder
-//       .output(path.join(tempDir, `%(id)s_%(epoch)s.%(ext)s`))
-//       .run();
-
-//     if (result && result.filePaths && result.filePaths.length > 0) {
-//       const filePath = result.filePaths[0];
-
-//       // Stream the file to the user
-//       const fileStream = fs.createReadStream(filePath);
-      
-//       fileStream.pipe(res);
-
-//       let cleanedUp = false;
-//       // Helper to clean up all files related to this download
-//       const cleanupFiles = () => {
-//         if (cleanedUp || !info.id) return;
-//         cleanedUp = true;
-        
-//         // Wait 1 second to ensure Windows file handles are completely released
-//         setTimeout(() => {
-//           fs.readdir(tempDir, (err, files) => {
-//             if (err) return;
-//             files.forEach(file => {
-//               if (file.includes(info.id)) {
-//                 fs.rm(path.join(tempDir, file), { recursive: true, force: true }, (e) => {
-//                   if (e) console.error('Failed to delete temp item:', e.message);
-//                 });
-//               }
-//             });
-//           });
-//         }, 1000);
-//       };
-
-//       fileStream.on('error', (err) => {
-//         console.error('File Stream Error:', err.message);
-//         if (!res.headersSent) {
-//           try { res.status(500).json({ error: 'Failed to send file.' }); } catch (e) {}
-//         }
-//         cleanupFiles();
-//       });
-
-//       // Handle successful transfer
-//       fileStream.on('close', () => {
-//          cleanupFiles();
-//       });
-
-//       req.on('close', () => {
-//          if (!fileStream.destroyed) fileStream.destroy();
-//          cleanupFiles();
-//       });
-
-//     } else {
-//       throw new Error('Download failed, no file paths returned.');
-//     }
-
-//   } catch (error) {
-//     console.error('Download Error:', error.message);
-//     if (!res.headersSent) {
-//       res.status(500).json({
-//         error: 'Failed to download audio with metadata. Please try again.'
-//       });
-//     }
-//   }
-// });
-
-// // ─── Health Check ────────────────────────────────────────────────
-// app.get('/api/health', (req, res) => {
-//   res.json({ status: 'ok', timestamp: new Date().toISOString() });
-// });
-
-// // ─── Start Server ────────────────────────────────────────────────
-// app.listen(PORT, () => {
-//   console.log(`
-//   ╔══════════════════════════════════════════╗
-//   ║   🎵 YouTube Audio Downloader Server    ║
-//   ║   Running on http://localhost:${PORT}       ║
-//   ╚══════════════════════════════════════════╝
-//   `);
-// });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
 const { YtDlp, helpers } = require('ytdlp-nodejs');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
+const path = require('path');
+const { PassThrough } = require('stream');
 
-// Initialize yt-dlp
+// Initialize yt-dlp wrapper
 const ytdlp = new YtDlp();
 
-// Download yt-dlp binary automatically
+// Ensure yt-dlp binary is downloaded if not present
 (async () => {
   try {
     console.log('Checking yt-dlp installation...');
     await helpers.downloadYtDlp();
     console.log('yt-dlp is ready.');
-  } catch (e) {
-    console.error('yt-dlp download failed:', e);
+  } catch(e) {
+    console.error('Warning: Failed to auto-download yt-dlp binary', e);
   }
 })();
 
+// Set ffmpeg path
 ffmpeg.setFfmpegPath(ffmpegStatic);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Helper to intelligently locate cookies file
+function getCookiesPath() {
+  const possiblePaths = [
+    path.join(__dirname, 'cookies.txt'),
+    path.join(__dirname, 'youtube-cookies.txt'),
+    '/etc/secrets/cookies.txt',
+    '/etc/secrets/youtube-cookies.txt'
+  ];
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-
-// ─────────────────────────────────────────────
-// Find cookies file
-// ─────────────────────────────────────────────
-
-function getCookiesPath() {
-  const paths = [
-    path.join(__dirname, 'cookies.txt'),
-    '/etc/secrets/cookies.txt'
-  ];
-
-  for (const p of paths) {
-    if (fs.existsSync(p)) return p;
-  }
-
-  return null;
-}
-
-
-// ─────────────────────────────────────────────
-// Validate YouTube URL
-// ─────────────────────────────────────────────
-
+// ─── Helper: validate YouTube URL ───────────────────────────────
 function isValidYouTubeUrl(url) {
+  // Broad pattern to support all YouTube/YT Music variations
   const pattern = /^(https?:\/\/)?(www\.|music\.)?(youtube\.com|youtu\.be)\/.+/;
   return pattern.test(url);
 }
 
-
-// ─────────────────────────────────────────────
-// Format Duration
-// ─────────────────────────────────────────────
-
+// ─── Helper: format duration ────────────────────────────────────
 function formatDuration(seconds) {
-  if (!seconds) return "0:00";
+  if (!seconds) return '0:00';
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-
-// ─────────────────────────────────────────────
-// API : Video Info
-// ─────────────────────────────────────────────
-
+// ─── API: Get Video Info ────────────────────────────────────────
 app.get('/api/info', async (req, res) => {
   try {
-
     const { url } = req.query;
 
     if (!url || !isValidYouTubeUrl(url)) {
       return res.status(400).json({
-        error: "Invalid YouTube URL"
+        error: 'Please provide a valid YouTube or YT Music link.'
       });
     }
 
+    // Check if cookies file exists to bypass bot blocks on cloud servers
     const cookiesPath = getCookiesPath();
+    let hasCookies = !!cookiesPath;
+    
+    // Log whether cookies were successfully loaded (helpful for debugging Render)
+    console.log(`[Info] Cookies detected: ${hasCookies}`);
 
-    const args = [
+    // Decode tokens (Handling URL-encoded %3D%3D strings)
+    const rawPoToken = (process.env.PO_TOKEN || '').trim();
+    const rawVisitorData = (process.env.VISITOR_DATA || '').trim();
+    
+    const poToken = rawPoToken.includes('%') ? decodeURIComponent(rawPoToken) : rawPoToken;
+    const visitorData = rawVisitorData.includes('%') ? decodeURIComponent(rawVisitorData) : rawVisitorData;
+
+    const infoArgs = [
+      '--no-check-certificates',
       '--no-warnings',
+      '--ignore-errors',
       '--no-playlist',
-      '--geo-bypass',
-      '--extractor-retries', '3'
+      '--force-ipv6',
+      '--geo-bypass'
     ];
-
-    if (cookiesPath) {
-      console.log("Using cookies strategy");
-      args.push('--cookies', cookiesPath);
-      args.push('--extractor-args', 'youtube:player_client=android');
-    } else {
-      console.log("Using Android client fallback");
-      args.push('--extractor-args', 'youtube:player_client=android');
+    
+    // Priority 1: Cookies (High Success Mobile Strategy)
+    if (hasCookies) {
+      console.log('[Info] Cookies detected - using Android Mobile strategy.');
+      infoArgs.push('--cookies', cookiesPath);
+      // Use the 'android' client which is currently the most resilient to bot checks
+      infoArgs.push('--extractor-args', 'youtube:player_client=android,web;player_skip=webpage,configs');
+      // Use an Android-specific User-Agent
+      infoArgs.push('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
+    } 
+    // Priority 2: PO Tokens (fallback if no cookies)
+    else if (poToken && visitorData) {
+      console.log('[Info] No cookies - using automated PO_TOKEN strategy.');
+      infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
+    } 
+    // Priority 3: TV Client Fallback
+    else {
+      console.log('[Info] No cookies or tokens - using TV client fallback.');
+      infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
     }
 
-    const info = await ytdlp.getInfoAsync(url, args);
-
+    const info = await ytdlp.getInfoAsync(url, infoArgs);
+    
     if (!info || !info.title) {
-      throw new Error("Unable to fetch video info");
+        throw new Error('Could not retrieve video details. The content might be private or restricted.');
     }
 
-    const author =
-      info.artist ||
-      info.creator ||
-      info.uploader ||
-      "Unknown";
-
+    // Stable artist extraction
+    const author = info.artist || info.creator || info.uploader || 'Unknown';
+    
+    // Safely extract resolutions
     let resolutions = [1080, 720, 480, 360];
-
-    if (info.formats) {
-
-      const found = [...new Set(
-        info.formats
-          .filter(f => f.vcodec !== "none" && f.height)
-          .map(f => f.height)
-      )].sort((a, b) => b - a);
-
+    if (info.formats && Array.isArray(info.formats)) {
+      const found = [...new Set(info.formats
+        .filter(f => f.vcodec !== 'none' && f.height)
+        .map(f => f.height))]
+        .sort((a, b) => b - a);
       if (found.length > 0) resolutions = found;
     }
 
     res.json({
       success: true,
       data: {
-        title: info.title,
+        title: info.title || 'Untitled',
         author: author,
-        duration: formatDuration(info.duration),
-        thumbnail:
-          info.thumbnail ||
-          (info.thumbnails?.slice(-1)[0]?.url || ""),
+        duration: formatDuration(info.duration || 0),
+        thumbnail: info.thumbnail || (info.thumbnails && info.thumbnails.length > 0 ? info.thumbnails[info.thumbnails.length - 1].url : ''),
         viewCount: (info.view_count || 0).toLocaleString(),
         videoId: info.id,
         availableResolutions: resolutions
       }
     });
-
   } catch (error) {
-
-    console.error("Info Error:", error.message);
-
-    res.status(500).json({
-      error: "Failed to fetch video information"
+    console.error('Info Error Details:', error);
+    const cleanError = error.message?.split('\n')[0] || 'Failed to fetch video information.';
+    res.status(500).json({ 
+        error: `${cleanError} The video may be restricted, private, or YouTube might be blocking the request.` 
     });
-
   }
 });
 
+// ─── API: Update yt-dlp ─────────────────────────────────────────
+app.get('/api/update', async (req, res) => {
+    try {
+        // console.log('Updating yt-dlp binary...');
+        await helpers.downloadYtDlp();
+        res.json({ success: true, message: 'yt-dlp binary updated successfully.' });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update binary: ' + error.message });
+    }
+});
 
-// ─────────────────────────────────────────────
-// API : Download
-// ─────────────────────────────────────────────
+const fs = require('fs');
 
+// ─── API: Download Audio as MP3 ─────────────────────────────────
 app.get('/api/download', async (req, res) => {
-
   try {
-
-    const {
-      url,
-      quality = "192",
-      format = "mp3",
-      customTitle,
-      customArtist
-    } = req.query;
+    const { url, quality = '192', format = 'mp3', customTitle, customArtist } = req.query;
 
     if (!url || !isValidYouTubeUrl(url)) {
-      return res.status(400).json({ error: "Invalid URL" });
+      return res.status(400).json({ error: 'Invalid URL.' });
+    }
+
+    const isVideo = format === 'mp4';
+    let audioQuality = quality;
+    
+    if (!isVideo) {
+      const qualityMap = { '320': '320K', '256': '256K', '192': '192K', '128': '128K' };
+      audioQuality = qualityMap[quality] || '192K';
     }
 
     const cookiesPath = getCookiesPath();
+    let hasCookies = !!cookiesPath;
 
-    const info = await ytdlp.getInfoAsync(url, [
+    // Decode tokens
+    const rawPoToken = (process.env.PO_TOKEN || '').trim();
+    const rawVisitorData = (process.env.VISITOR_DATA || '').trim();
+    
+    const poToken = rawPoToken.includes('%') ? decodeURIComponent(rawPoToken) : rawPoToken;
+    const visitorData = rawVisitorData.includes('%') ? decodeURIComponent(rawVisitorData) : rawVisitorData;
+
+    const infoArgs = [
+      '--no-check-certificates',
       '--no-warnings',
-      '--geo-bypass',
-      '--extractor-args', 'youtube:player_client=android'
-    ]);
+      '--force-ipv6',
+      '--geo-bypass'
+    ];
 
-    const title = customTitle || info.title;
-    const artist = customArtist ||
-      info.artist ||
-      info.creator ||
-      info.uploader ||
-      "Unknown";
-
-    const safeTitle =
-      (title || "download")
-        .replace(/[^\w\s-]/g, "")
-        .trim();
-
-    const tempDir = path.join(__dirname, 'temp');
-
-    if (!fs.existsSync(tempDir))
-      fs.mkdirSync(tempDir, { recursive: true });
-
-    const outputFile =
-      path.join(tempDir, `%(id)s.%(ext)s`);
-
-    let builder = ytdlp
-      .download(url)
-      .addArgs('--no-warnings')
-      .addArgs('--geo-bypass')
-      .addArgs('--extractor-args', 'youtube:player_client=android')
-      .addArgs('--ffmpeg-location', ffmpegStatic);
-
-    if (cookiesPath) {
-      builder = builder.addArgs('--cookies', cookiesPath);
+    // Priority 1: Cookies (Android Strategy)
+    if (hasCookies) {
+      infoArgs.push('--cookies', cookiesPath);
+      infoArgs.push('--extractor-args', 'youtube:player_client=android,web;player_skip=webpage,configs');
+      infoArgs.push('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
+    } 
+    // Priority 2: PO Tokens
+    else if (poToken && visitorData) {
+      infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
+    } 
+    // Priority 3: TV Client Fallback
+    else {
+      infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
     }
 
-    if (format === "mp4") {
+    const info = await ytdlp.getInfoAsync(url, infoArgs);
 
-      const resLimit = quality || "720";
+    const finalTitle = customTitle || info.title;
+    const finalArtist = customArtist || (info.artist || info.creator || info.uploader);
+    
+    const safeTitle = (finalTitle || 'Download').replace(/[^\w\s-]/g, '').trim();
 
-      builder = builder
-        .addArgs('-f', `bv*[height<=${resLimit}]+ba/b[height<=${resLimit}]`)
-        .addArgs('--merge-output-format', 'mp4');
+    const tempDir = path.join(__dirname, 'temp_downloads');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
+    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}.${isVideo ? 'mp4' : 'mp3'}"`);
+    res.setHeader('Content-Type', isVideo ? 'video/mp4' : 'audio/mpeg');
+
+    // console.log(`Download request: ${url}, format: ${format}, quality: ${quality}`);
+    
+    // Run the download process with resilient flags
+    let downloadBuilder = ytdlp.download(url)
+      .addArgs('--no-check-certificates')
+      .addArgs('--ffmpeg-location', ffmpegStatic)
+      .addArgs('--force-ipv6')
+      .addArgs('--geo-bypass');
+
+    if (hasCookies) {
+      downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath)
+        .addArgs('--extractor-args', 'youtube:player_client=android,web;player_skip=webpage,configs')
+        .addArgs('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
+    } else if (poToken && visitorData) {
+      downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
     } else {
-
-      const qualityMap = {
-        320: "320K",
-        256: "256K",
-        192: "192K",
-        128: "128K"
-      };
-
-      const audioQuality =
-        qualityMap[quality] || "192K";
-
-      builder = builder
-        .format({ filter: 'audioonly' })
-        .addArgs('-x')
-        .addArgs('--audio-format', 'mp3')
-        .addArgs('--audio-quality', audioQuality)
-        .addArgs('--postprocessor-args',
-          `ffmpeg:-metadata title="${title}" -metadata artist="${artist}"`);
+      downloadBuilder = downloadBuilder.addArgs('--extractor-args', 'youtube:player_client=tv,default');
     }
 
-    const result = await builder
-      .output(outputFile)
+    if (isVideo) {
+      const resLimit = quality || '720';
+      // console.log(`[DOWNLOAD] MP4 Mode - URL: ${url}, Target Resolution: ${resLimit}p`);
+      
+      downloadBuilder = downloadBuilder
+        .addArgs('-f', `bv*[height<=${resLimit}][ext=mp4]+ba[ext=m4a]/bv*[height<=${resLimit}]+ba/b[height<=${resLimit}]`)
+        .addArgs('--merge-output-format', 'mp4');
+    } else {
+      downloadBuilder = downloadBuilder
+        .format({ filter: 'audioonly' })
+        .addArgs('-x', '--audio-format', 'mp3', '--audio-quality', audioQuality)
+        .addArgs('--metadata-from-title', '%(artist)s - %(title)s')
+        .addArgs('--postprocessor-args', `ffmpeg:-metadata title="${finalTitle}" -metadata artist="${finalArtist}"`)
+        .embedThumbnail()
+        .embedMetadata();
+    }
+
+    const result = await downloadBuilder
+      .output(path.join(tempDir, `%(id)s_%(epoch)s.%(ext)s`))
       .run();
 
-    if (!result.filePaths || !result.filePaths.length) {
-      throw new Error("Download failed");
+    if (result && result.filePaths && result.filePaths.length > 0) {
+      const filePath = result.filePaths[0];
+
+      // Stream the file to the user
+      const fileStream = fs.createReadStream(filePath);
+      
+      fileStream.pipe(res);
+
+      let cleanedUp = false;
+      // Helper to clean up all files related to this download
+      const cleanupFiles = () => {
+        if (cleanedUp || !info.id) return;
+        cleanedUp = true;
+        
+        // Wait 1 second to ensure Windows file handles are completely released
+        setTimeout(() => {
+          fs.readdir(tempDir, (err, files) => {
+            if (err) return;
+            files.forEach(file => {
+              if (file.includes(info.id)) {
+                fs.rm(path.join(tempDir, file), { recursive: true, force: true }, (e) => {
+                  if (e) console.error('Failed to delete temp item:', e.message);
+                });
+              }
+            });
+          });
+        }, 1000);
+      };
+
+      fileStream.on('error', (err) => {
+        console.error('File Stream Error:', err.message);
+        if (!res.headersSent) {
+          try { res.status(500).json({ error: 'Failed to send file.' }); } catch (e) {}
+        }
+        cleanupFiles();
+      });
+
+      // Handle successful transfer
+      fileStream.on('close', () => {
+         cleanupFiles();
+      });
+
+      req.on('close', () => {
+         if (!fileStream.destroyed) fileStream.destroy();
+         cleanupFiles();
+      });
+
+    } else {
+      throw new Error('Download failed, no file paths returned.');
     }
-
-    const filePath = result.filePaths[0];
-
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${safeTitle}.${format}"`
-    );
-
-    res.setHeader(
-      "Content-Type",
-      format === "mp4"
-        ? "video/mp4"
-        : "audio/mpeg"
-    );
-
-    const stream = fs.createReadStream(filePath);
-
-    stream.pipe(res);
-
-    stream.on("close", () => {
-      fs.rm(filePath, { force: true }, () => {});
-    });
 
   } catch (error) {
-
-    console.error("Download Error:", error);
-
+    console.error('Download Error:', error.message);
     if (!res.headersSent) {
       res.status(500).json({
-        error: "Download failed"
+        error: 'Failed to download audio with metadata. Please try again.'
       });
     }
-
   }
-
 });
 
-
-// ─────────────────────────────────────────────
-// Health Check
-// ─────────────────────────────────────────────
-
+// ─── Health Check ────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({
-    status: "ok",
-    time: new Date().toISOString()
-  });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-
-// ─────────────────────────────────────────────
-// Start Server
-// ─────────────────────────────────────────────
-
+// ─── Start Server ────────────────────────────────────────────────
 app.listen(PORT, () => {
-
   console.log(`
-══════════════════════════════════════
-🎵 YouTube Downloader Server
-Running on : http://localhost:${PORT}
-══════════════════════════════════════
-`);
-
+  ╔══════════════════════════════════════════╗
+  ║   🎵 YouTube Audio Downloader Server    ║
+  ║   Running on http://localhost:${PORT}       ║
+  ╚══════════════════════════════════════════╝
+  `);
 });
