@@ -6,6 +6,9 @@ const ffmpegStatic = require('ffmpeg-static');
 const path = require('path');
 const { PassThrough } = require('stream');
 
+// Standardized fallback clients for yt-dlp
+const PLAYER_CLIENTS = 'android,ios,mweb,web,tv';
+
 // Initialize yt-dlp wrapper
 const ytdlp = new YtDlp();
 
@@ -96,25 +99,41 @@ app.get('/api/info', async (req, res) => {
     
     // Priority 1: Cookies (High Success Mobile Strategy)
     if (hasCookies) {
-      console.log('[Info] Cookies detected - using Android Mobile strategy.');
+      console.log(`[Info] Cookies detected - using ${PLAYER_CLIENTS} strategy.`);
       infoArgs.push('--cookies', cookiesPath);
-      // Use the 'android' client which is currently the most resilient to bot checks
-      infoArgs.push('--extractor-args', 'youtube:player_client=android,web;player_skip=webpage,configs');
-      // Use an Android-specific User-Agent
+      infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};player_skip=webpage,configs`);
       infoArgs.push('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
     } 
     // Priority 2: PO Tokens (fallback if no cookies)
     else if (poToken && visitorData) {
-      console.log('[Info] No cookies - using automated PO_TOKEN strategy.');
-      infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
+      console.log(`[Info] No cookies - using automated PO_TOKEN strategy with ${PLAYER_CLIENTS}.`);
+      infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
     } 
     // Priority 3: TV Client Fallback
     else {
-      console.log('[Info] No cookies or tokens - using TV client fallback.');
-      infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
+      console.log(`[Info] No cookies or tokens - using multi-client fallback: ${PLAYER_CLIENTS}.`);
+      infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS},default`);
     }
 
-    const info = await ytdlp.getInfoAsync(url, infoArgs);
+    let info = null;
+    let attempts = 0;
+    const maxAttempts = 2;
+
+    while (attempts < maxAttempts) {
+      try {
+        attempts++;
+        info = await ytdlp.getInfoAsync(url, infoArgs);
+        if (info && info.title) break;
+      } catch (e) {
+        console.warn(`[Info] Attempt ${attempts} failed: ${e.message}`);
+        if (attempts >= maxAttempts) throw e;
+        // On second attempt, let's try pushing tv client to the front if cookies didn't work
+        if (!hasCookies && !infoArgs.includes('tv,android')) {
+            const idx = infoArgs.indexOf('--extractor-args');
+            if (idx !== -1) infoArgs[idx+1] = `youtube:player_client=tv,android,ios,mweb,web;player_skip=webpage,configs`;
+        }
+      }
+    }
     
     if (!info || !info.title) {
         throw new Error('Could not retrieve video details. The content might be private or restricted.');
@@ -204,16 +223,16 @@ app.get('/api/download', async (req, res) => {
     // Priority 1: Cookies (Android Strategy)
     if (hasCookies) {
       infoArgs.push('--cookies', cookiesPath);
-      infoArgs.push('--extractor-args', 'youtube:player_client=android,web;player_skip=webpage,configs');
+      infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};player_skip=webpage,configs`);
       infoArgs.push('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
     } 
     // Priority 2: PO Tokens
     else if (poToken && visitorData) {
-      infoArgs.push('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
+      infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
     } 
     // Priority 3: TV Client Fallback
     else {
-      infoArgs.push('--extractor-args', 'youtube:player_client=tv,default');
+      infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS},default`);
     }
 
     const info = await ytdlp.getInfoAsync(url, infoArgs);
@@ -240,12 +259,12 @@ app.get('/api/download', async (req, res) => {
 
     if (hasCookies) {
       downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath)
-        .addArgs('--extractor-args', 'youtube:player_client=android,web;player_skip=webpage,configs')
+        .addArgs('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};player_skip=webpage,configs`)
         .addArgs('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
     } else if (poToken && visitorData) {
-      downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=web,mweb;po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
+      downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
     } else {
-      downloadBuilder = downloadBuilder.addArgs('--extractor-args', 'youtube:player_client=tv,default');
+      downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS},default`);
     }
 
     if (isVideo) {
