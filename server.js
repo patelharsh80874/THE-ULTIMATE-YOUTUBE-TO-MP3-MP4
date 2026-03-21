@@ -104,6 +104,14 @@ app.get('/api/info', async (req, res) => {
     // Log whether cookies were successfully loaded (helpful for debugging Render)
     console.log(`[Info] Cookies detected: ${hasCookies}`);
 
+    // Handle PO_TOKEN and Proxy if user wants to use them for Datacenter unblocking
+    const rawPoToken = (process.env.PO_TOKEN || '').trim();
+    const rawVisitorData = (process.env.VISITOR_DATA || '').trim();
+    const poToken = rawPoToken.includes('%') ? decodeURIComponent(rawPoToken) : rawPoToken;
+    const visitorData = rawVisitorData.includes('%') ? decodeURIComponent(rawVisitorData) : rawVisitorData;
+    
+    const proxyUrl = process.env.PROXY || '';
+
     const infoArgs = [
       '--no-check-certificates',
       '--no-warnings',
@@ -112,21 +120,37 @@ app.get('/api/info', async (req, res) => {
       '--force-ipv6',
       '--geo-bypass'
     ];
+
+    if (proxyUrl) {
+      console.log(`[Info] Using Proxy: ${proxyUrl}`);
+      infoArgs.push('--proxy', proxyUrl);
+    }
     
     // Priority 1: Cookies (Focus on Web/Desktop API to avoid bot blocks)
     if (hasCookies) {
+      infoArgs.push('--cookies', cookiesPath);
       if (process.env.RENDER) {
         console.log(`[Info] Render Datacenter detected - using tv_embedded client with cookies to avoid IP ban.`);
-        infoArgs.push('--cookies', cookiesPath);
-        infoArgs.push('--extractor-args', 'youtube:player_client=tv_embedded,web_safari,web');
+        
+        let extractorArgs = 'youtube:player_client=tv_embedded,web_safari,web';
+        if (poToken && visitorData) {
+            console.log(`[Info] Injecting PO_TOKEN with cookies to boost trust.`);
+            extractorArgs += `;po_token=${poToken};visitor_data=${visitorData}`;
+        }
+        infoArgs.push('--extractor-args', extractorArgs);
       } else {
         console.log(`[Info] Cookies detected - letting yt-dlp use default web client auth.`);
-        infoArgs.push('--cookies', cookiesPath);
+        if (poToken && visitorData) {
+             infoArgs.push('--extractor-args', `youtube:player_client=web;po_token=${poToken};visitor_data=${visitorData}`);
+        }
       }
     } 
     // Fallback if no cookies
-    else {
-      console.log(`[Info] No cookies - using multi-client fallback: ${PLAYER_CLIENTS}.`);
+    else if (poToken && visitorData) {
+      console.log(`[Info] No cookies - using PO_TOKEN fallback.`);
+      infoArgs.push('--extractor-args', `youtube:player_client=web;po_token=${poToken};visitor_data=${visitorData}`);
+    } else {
+      console.log(`[Info] No setup - using multi-client fallback: ${PLAYER_CLIENTS}.`);
       infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS},default`);
     }
 
@@ -219,6 +243,14 @@ app.get('/api/download', async (req, res) => {
     const cookiesPath = getCookiesPath();
     let hasCookies = !!cookiesPath;
 
+    // Handle PO_TOKEN and Proxy
+    const rawPoToken = (process.env.PO_TOKEN || '').trim();
+    const rawVisitorData = (process.env.VISITOR_DATA || '').trim();
+    const poToken = rawPoToken.includes('%') ? decodeURIComponent(rawPoToken) : rawPoToken;
+    const visitorData = rawVisitorData.includes('%') ? decodeURIComponent(rawVisitorData) : rawVisitorData;
+    
+    const proxyUrl = process.env.PROXY || '';
+
     const infoArgs = [
       '--no-check-certificates',
       '--no-warnings',
@@ -226,15 +258,25 @@ app.get('/api/download', async (req, res) => {
       '--geo-bypass'
     ];
 
+    if (proxyUrl) {
+      infoArgs.push('--proxy', proxyUrl);
+    }
+
     // Priority 1: Cookies (Web Client Strategy)
     if (hasCookies) {
       infoArgs.push('--cookies', cookiesPath);
       if (process.env.RENDER) {
-        infoArgs.push('--extractor-args', 'youtube:player_client=tv_embedded,web_safari,web');
+        let extArgs = 'youtube:player_client=tv_embedded,web_safari,web';
+        if (poToken && visitorData) extArgs += `;po_token=${poToken};visitor_data=${visitorData}`;
+        infoArgs.push('--extractor-args', extArgs);
+      } else if (poToken && visitorData) {
+        infoArgs.push('--extractor-args', `youtube:player_client=web;po_token=${poToken};visitor_data=${visitorData}`);
       }
     } 
     // Fallback if no cookies
-    else {
+    else if (poToken && visitorData) {
+      infoArgs.push('--extractor-args', `youtube:player_client=web;po_token=${poToken};visitor_data=${visitorData}`);
+    } else {
       infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS},default`);
     }
 
@@ -260,11 +302,21 @@ app.get('/api/download', async (req, res) => {
       .addArgs('--force-ipv6')
       .addArgs('--geo-bypass');
 
+    if (proxyUrl) {
+      downloadBuilder = downloadBuilder.addArgs('--proxy', proxyUrl);
+    }
+
     if (hasCookies) {
       downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath);
       if (process.env.RENDER) {
-        downloadBuilder = downloadBuilder.addArgs('--extractor-args', 'youtube:player_client=tv_embedded,web_safari,web');
+        let extArgs = 'youtube:player_client=tv_embedded,web_safari,web';
+        if (poToken && visitorData) extArgs += `;po_token=${poToken};visitor_data=${visitorData}`;
+        downloadBuilder = downloadBuilder.addArgs('--extractor-args', extArgs);
+      } else if (poToken && visitorData) {
+        downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=web;po_token=${poToken};visitor_data=${visitorData}`);
       }
+    } else if (poToken && visitorData) {
+      downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=web;po_token=${poToken};visitor_data=${visitorData}`);
     } else {
       downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS},default`);
     }
