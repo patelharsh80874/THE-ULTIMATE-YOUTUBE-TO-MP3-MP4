@@ -115,8 +115,14 @@ app.get('/api/info', async (req, res) => {
     
     // Priority 1: Cookies (Focus on Web/Desktop API to avoid bot blocks)
     if (hasCookies) {
-      console.log(`[Info] Cookies detected - letting yt-dlp use default web client auth.`);
-      infoArgs.push('--cookies', cookiesPath);
+      if (process.env.RENDER) {
+        console.log(`[Info] Render Datacenter detected - using tv_embedded client with cookies to avoid IP ban.`);
+        infoArgs.push('--cookies', cookiesPath);
+        infoArgs.push('--extractor-args', 'youtube:player_client=tv_embedded,web_safari,web');
+      } else {
+        console.log(`[Info] Cookies detected - letting yt-dlp use default web client auth.`);
+        infoArgs.push('--cookies', cookiesPath);
+      }
     } 
     // Fallback if no cookies
     else {
@@ -223,6 +229,9 @@ app.get('/api/download', async (req, res) => {
     // Priority 1: Cookies (Web Client Strategy)
     if (hasCookies) {
       infoArgs.push('--cookies', cookiesPath);
+      if (process.env.RENDER) {
+        infoArgs.push('--extractor-args', 'youtube:player_client=tv_embedded,web_safari,web');
+      }
     } 
     // Fallback if no cookies
     else {
@@ -253,6 +262,9 @@ app.get('/api/download', async (req, res) => {
 
     if (hasCookies) {
       downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath);
+      if (process.env.RENDER) {
+        downloadBuilder = downloadBuilder.addArgs('--extractor-args', 'youtube:player_client=tv_embedded,web_safari,web');
+      }
     } else {
       downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS},default`);
     }
