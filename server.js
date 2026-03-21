@@ -5,6 +5,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
 const path = require('path');
 const { PassThrough } = require('stream');
+const fs = require('fs');
 
 // Standardized fallback clients for yt-dlp
 const PLAYER_CLIENTS = 'android,ios,mweb,web,tv';
@@ -31,6 +32,24 @@ const PORT = process.env.PORT || 3000;
 
 // Helper to intelligently locate cookies file
 function getCookiesPath() {
+  // 1. Check if cookies are passed via environment variable (useful for Render/Vercel)
+  if (process.env.YOUTUBE_COOKIES) {
+    try {
+      const tempDir = path.join(__dirname, 'temp_downloads');
+      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+      
+      const envCookiesPath = path.join(tempDir, 'env-cookies.txt');
+      // Replace literal \n with actual newlines if the user pasted them as a single line
+      const cookiesContent = process.env.YOUTUBE_COOKIES.replace(/\\n/g, '\n');
+      
+      fs.writeFileSync(envCookiesPath, cookiesContent, 'utf8');
+      return envCookiesPath;
+    } catch (e) {
+      console.error('Failed to write cookies from env:', e.message);
+    }
+  }
+
+  // 2. Check traditional file locations
   const possiblePaths = [
     path.join(__dirname, 'cookies.txt'),
     path.join(__dirname, 'youtube-cookies.txt'),
@@ -183,8 +202,6 @@ app.get('/api/update', async (req, res) => {
         res.status(500).json({ error: 'Failed to update binary: ' + error.message });
     }
 });
-
-const fs = require('fs');
 
 // ─── API: Download Audio as MP3 ─────────────────────────────────
 app.get('/api/download', async (req, res) => {
