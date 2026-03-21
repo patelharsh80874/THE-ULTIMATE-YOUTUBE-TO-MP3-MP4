@@ -7,8 +7,7 @@ const path = require('path');
 const { PassThrough } = require('stream');
 const fs = require('fs');
 
-// Standardized fallback clients for yt-dlp
-const PLAYER_CLIENTS = 'android,ios,mweb,web,tv';
+const PLAYER_CLIENTS = 'web,tv,mweb';
 
 // Initialize yt-dlp wrapper
 const ytdlp = new YtDlp();
@@ -109,12 +108,10 @@ app.get('/api/info', async (req, res) => {
       '--geo-bypass'
     ];
     
-    // Priority 1: Cookies (High Success Mobile Strategy)
+    // Priority 1: Cookies (Focus on Web/Desktop API to avoid bot blocks)
     if (hasCookies) {
-      console.log(`[Info] Cookies detected - using ${PLAYER_CLIENTS} strategy.`);
+      console.log(`[Info] Cookies detected - letting yt-dlp use default web client auth.`);
       infoArgs.push('--cookies', cookiesPath);
-      infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};player_skip=webpage,configs`);
-      infoArgs.push('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
     } 
     // Fallback if no cookies
     else {
@@ -218,11 +215,9 @@ app.get('/api/download', async (req, res) => {
       '--geo-bypass'
     ];
 
-    // Priority 1: Cookies (Android Strategy)
+    // Priority 1: Cookies (Web Client Strategy)
     if (hasCookies) {
       infoArgs.push('--cookies', cookiesPath);
-      infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};player_skip=webpage,configs`);
-      infoArgs.push('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
     } 
     // Fallback if no cookies
     else {
@@ -252,9 +247,7 @@ app.get('/api/download', async (req, res) => {
       .addArgs('--geo-bypass');
 
     if (hasCookies) {
-      downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath)
-        .addArgs('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};player_skip=webpage,configs`)
-        .addArgs('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
+      downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath);
     } else {
       downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS},default`);
     }
