@@ -100,13 +100,6 @@ app.get('/api/info', async (req, res) => {
     // Log whether cookies were successfully loaded (helpful for debugging Render)
     console.log(`[Info] Cookies detected: ${hasCookies}`);
 
-    // Decode tokens (Handling URL-encoded %3D%3D strings)
-    const rawPoToken = (process.env.PO_TOKEN || '').trim();
-    const rawVisitorData = (process.env.VISITOR_DATA || '').trim();
-    
-    const poToken = rawPoToken.includes('%') ? decodeURIComponent(rawPoToken) : rawPoToken;
-    const visitorData = rawVisitorData.includes('%') ? decodeURIComponent(rawVisitorData) : rawVisitorData;
-
     const infoArgs = [
       '--no-check-certificates',
       '--no-warnings',
@@ -123,14 +116,9 @@ app.get('/api/info', async (req, res) => {
       infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};player_skip=webpage,configs`);
       infoArgs.push('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
     } 
-    // Priority 2: PO Tokens (fallback if no cookies)
-    else if (poToken && visitorData) {
-      console.log(`[Info] No cookies - using automated PO_TOKEN strategy with ${PLAYER_CLIENTS}.`);
-      infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
-    } 
-    // Priority 3: TV Client Fallback
+    // Fallback if no cookies
     else {
-      console.log(`[Info] No cookies or tokens - using multi-client fallback: ${PLAYER_CLIENTS}.`);
+      console.log(`[Info] No cookies - using multi-client fallback: ${PLAYER_CLIENTS}.`);
       infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS},default`);
     }
 
@@ -223,13 +211,6 @@ app.get('/api/download', async (req, res) => {
     const cookiesPath = getCookiesPath();
     let hasCookies = !!cookiesPath;
 
-    // Decode tokens
-    const rawPoToken = (process.env.PO_TOKEN || '').trim();
-    const rawVisitorData = (process.env.VISITOR_DATA || '').trim();
-    
-    const poToken = rawPoToken.includes('%') ? decodeURIComponent(rawPoToken) : rawPoToken;
-    const visitorData = rawVisitorData.includes('%') ? decodeURIComponent(rawVisitorData) : rawVisitorData;
-
     const infoArgs = [
       '--no-check-certificates',
       '--no-warnings',
@@ -243,11 +224,7 @@ app.get('/api/download', async (req, res) => {
       infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};player_skip=webpage,configs`);
       infoArgs.push('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
     } 
-    // Priority 2: PO Tokens
-    else if (poToken && visitorData) {
-      infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
-    } 
-    // Priority 3: TV Client Fallback
+    // Fallback if no cookies
     else {
       infoArgs.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS},default`);
     }
@@ -278,8 +255,6 @@ app.get('/api/download', async (req, res) => {
       downloadBuilder = downloadBuilder.addArgs('--cookies', cookiesPath)
         .addArgs('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};player_skip=webpage,configs`)
         .addArgs('--user-agent', 'com.google.android.youtube/19.05.35 (Linux; U; Android 14; en_US) (gzip)');
-    } else if (poToken && visitorData) {
-      downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS};po_token=${poToken};visitor_data=${visitorData};player_skip=webpage,configs`);
     } else {
       downloadBuilder = downloadBuilder.addArgs('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS},default`);
     }
