@@ -19,6 +19,7 @@
   "dependencies": {
     "@distube/ytdl-core": "^4.15.11",
     "cors": "^2.8.5",
+    "dotenv": "^17.3.1",
     "express": "^4.21.2",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.3",

@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { YtDlp, helpers } = require('ytdlp-nodejs');
@@ -42,6 +43,7 @@ function getCookiesPath() {
       const cookiesContent = process.env.YOUTUBE_COOKIES.replace(/\\n/g, '\n');
       
       fs.writeFileSync(envCookiesPath, cookiesContent, 'utf8');
+      console.log('[Info] Cookies loaded successfully from YOUTUBE_COOKIES environment variable.');
       return envCookiesPath;
     } catch (e) {
       console.error('Failed to write cookies from env:', e.message);
@@ -56,7 +58,10 @@ function getCookiesPath() {
     '/etc/secrets/youtube-cookies.txt'
   ];
   for (const p of possiblePaths) {
-    if (fs.existsSync(p)) return p;
+    if (fs.existsSync(p)) {
+      console.log(`[Info] Cookies file found at: ${p}`);
+      return p;
+    }
   }
   return null;
 }
